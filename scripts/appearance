@@ -1,0 +1,506 @@
+#!/usr/bin/env python3
+"""Opt-in, narrowly scoped appearance transaction for drona.mac (Python 3.9+).
+
+All output is JSON. No consent means no writes, including to the state directory.
+Only two GNOME preferences and colour-only user shell.toml keys are supported.
+See appearance/SAFETY.md for the deliberately conservative recovery contract.
+"""
+
+import argparse
+import base64
+import contextlib
+import datetime
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parent.parent
+PALETTE = ROOT / "appearance/shell-palette.toml"
+COLOR_SOURCE = Path("/usr/share/omarchy/shell/Commons/Color.qml")
+SCHEMA = "org.gnome.desktop.interface"
+DCONF_PREFIX = "/org/gnome/desktop/interface/"
+PREFERENCES = {"color-scheme": "'prefer-dark'", "gtk-theme": "'Adwaita-dark'"}
+MAX_FILE = 128 * 1024
+MAX_JOURNAL = 512 * 1024
+SECTION = re.compile(r"^\[([A-Za-z0-9_-]+)\]\s*(?:#.*)?$")
+KEY_VALUE = re.compile(
+    r'''^([A-Za-z0-9_-]+)\s*=\s*(?:["'][^"']+["']|-?\d+(?:\.\d+)?(?:\s+-?\d+(?:\.\d+)?){0,3}|[A-Za-z][A-Za-z0-9_-]*)\s*(?:#.*)?$'''
+)
+ALLOWED = {
+    "bar": {"background", "background-alpha", "text", "active"},
+    "popups": {"background", "background-alpha", "text", "border", "border-alpha"},
+    "tooltip": {"background", "background-alpha", "text", "border", "border-alpha"},
+    "notifications": {"background", "background-alpha", "text", "border", "border-alpha", "countdown"},
+    "menu": {"background", "background-alpha", "text", "border", "border-alpha",
+             "selected-background", "selected-background-alpha", "selected-text",
+             "selected-border", "selected-border-alpha"},
+}
+LIMITATIONS = [
+    "No full theme switch, Hyprland writes/reload, keybinding, logo, shell.json, font, icon, toolkit CSS or authentication edits.",
+    "Wallpaper is an original bundled asset only; automatic wallpaper apply/restore is not supported.",
+    "Shell restore is whole-file compare-and-swap: ANY later edit or mode change preserves the entire file and reports a conflict.",
+    "The lock serializes this helper, not external editors/settings daemons; avoid editing these settings during a transaction.",
+    "Identical later user values cannot be distinguished from this helper's own values.",
+]
+
+
+class AppearanceError(Exception):
+    pass
+
+
+def safe_path(path):
+    """Do not follow redirected config/state paths into someone else's files."""
+    for item in (path, *path.parents):
+        if item.is_symlink():
+            raise AppearanceError(f"Refusing symlink: {item}")
+    resolved = path.resolve()
+    if resolved == ROOT or ROOT in resolved.parents:
+        raise AppearanceError("Configuration/recovery state must be outside the source checkout")
+    if resolved.parts[1:2] in [("usr",), ("etc",), ("bin",), ("sbin",)]:
+        raise AppearanceError("Refusing a system/package configuration destination")
+
+
+def read_file(path, limit=MAX_FILE, external=False):
+    if not external:
+        safe_path(path)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise AppearanceError(f"Not a single-link regular file: {path}")
+        if not external and info.st_uid != os.getuid():
+            raise AppearanceError(f"Not owned by the current user: {path}")
+        data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise AppearanceError(f"File exceeds the {limit}-byte safety limit: {path}")
+        return {"data": base64.b64encode(data).decode("ascii"), "mode": stat.S_IMODE(info.st_mode)}
+
+
+def raw(snapshot):
+    return b"" if snapshot is None else base64.b64decode(snapshot["data"], validate=True)
+
+
+def sync_dir(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def atomic_write(path, data, mode=0o600):
+    safe_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, name = tempfile.mkstemp(prefix=".drona-mac-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, path)
+        sync_dir(path.parent)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def command(*args):
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=10,
+                                env={**os.environ, "LC_ALL": "C"}, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise AppearanceError(f"{args[0]} unavailable/timed out: {exc}") from exc
+    if result.returncode:
+        raise AppearanceError(f"{args[0]} {args[1]} failed: {result.stderr.strip()[:300]}")
+    return result.stdout.strip()
+
+
+def parse_shell(text):
+    """Accept only the installed Color.qml line grammar, not arbitrary TOML.
+
+    In particular reject multiline/dotted/nested TOML rather than accidentally
+    changing the QML parser's effective section. Keep comments/unknown keys.
+    """
+    lines = text.splitlines(keepends=True)
+    sections, keys = {}, {}
+    section = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = SECTION.fullmatch(stripped)
+        if match:
+            section = match[1]
+            if section in sections:
+                raise AppearanceError(f"Duplicate shell section: {section}")
+            sections[section] = index
+            continue
+        match = KEY_VALUE.fullmatch(stripped)
+        if not match or section is None:
+            raise AppearanceError(f"Unsupported shell.toml syntax at line {index + 1}; left unchanged")
+        key = (section, match[1])
+        if key in keys:
+            raise AppearanceError(f"Duplicate shell key: {'.'.join(key)}")
+        keys[key] = index
+    return lines, sections, keys
+
+
+def palette_values():
+    asset = read_file(PALETTE, external=True)
+    if asset is None:
+        raise AppearanceError("Bundled shell palette is missing")
+    lines, _, keys = parse_shell(raw(asset).decode("utf-8"))
+    values = {}
+    for (section, key), index in keys.items():
+        value = lines[index].split("=", 1)[1].strip()
+        if key not in ALLOWED.get(section, set()):
+            raise AppearanceError("Palette contains a non-colour or protected key")
+        if not re.fullmatch(r'"#[0-9a-fA-F]{6}"|1\.0', value):
+            raise AppearanceError("Palette contains an unsupported colour value")
+        values[(section, key)] = value
+    if not values:
+        raise AppearanceError("Empty shell palette")
+    return values
+
+
+def merge_palette(before, values):
+    text = raw(before).decode("utf-8")
+    lines, sections, keys = parse_shell(text)
+    replacements, insertions = {}, {}
+    new_sections = {}
+    # Existing lines keep their indentation, spacing, inline comments and EOLs.
+    for (section, key), value in values.items():
+        if (section, key) in keys:
+            index = keys[(section, key)]
+            match = re.fullmatch(r'''(\s*[A-Za-z0-9_-]+\s*=\s*)(["'][^"']+["']|[^#\r\n]*?)(\s*(?:#.*)?)(\r?\n)?''', lines[index])
+            if not match:
+                raise AppearanceError("Cannot safely preserve shell.toml formatting")
+            replacements[index] = match[1] + value + match[3] + (match[4] or "")
+        elif section in sections:
+            following = [i for i in sections.values() if i > sections[section]]
+            boundary = min(following) if following else len(lines)
+            insertions.setdefault(boundary, []).append(f'{key} = {value}\n')
+        else:
+            new_sections.setdefault(section, []).append(f'{key} = {value}\n')
+    result = ""
+    for index in range(len(lines) + 1):
+        if index in insertions:
+            if result and not result.endswith("\n"):
+                result += "\n"
+            result += "".join(insertions[index])
+        if index < len(lines):
+            result += replacements.get(index, lines[index])
+    for section, added in new_sections.items():
+        if result and not result.endswith("\n"):
+            result += "\n"
+        result += f'\n[{section}]\n' + "".join(added)
+    encoded = result.encode("utf-8")
+    if len(encoded) > MAX_FILE:
+        raise AppearanceError("Merged shell.toml exceeds the size limit")
+    return {"data": base64.b64encode(encoded).decode("ascii"),
+            "mode": before["mode"] if before is not None else 0o600}
+
+
+def check_variant(value):
+    if (not isinstance(value, str) or len(value) > 4096 or "\x00" in value
+            or len(value) < 2 or value[0] not in "\"'" or value[-1] != value[0]):
+        raise AppearanceError("Expected a bounded GVariant string")
+
+
+def gnome_current(key):
+    if os.environ.get("GSETTINGS_BACKEND", "dconf") not in ("", "dconf"):
+        raise AppearanceError("Only the dconf GSettings backend is reversible here")
+    effective = command("gsettings", "get", SCHEMA, key)
+    check_variant(effective)
+    user = command("dconf", "read", DCONF_PREFIX + key) or None
+    if user is not None:
+        check_variant(user)
+        if user != effective:
+            raise AppearanceError("GSettings and dconf disagree; custom defaults/backend are unsupported")
+    return {"effective": effective, "user": user}
+
+
+def matches(current, expected):
+    # An unset value follows current defaults, including defaults changed later.
+    if isinstance(expected, dict) and "user" in expected and expected["user"] is None:
+        return current["user"] is None
+    return current == expected
+
+
+class Appearance:
+    def __init__(self):
+        self.home = Path(os.environ.get("HOME", str(Path.home())))
+        if not self.home.is_absolute():
+            raise AppearanceError("HOME must be absolute")
+        def xdg(name, fallback):
+            value = os.environ.get(name, "")
+            # The XDG specification says relative values are invalid/ignored.
+            return Path(value) if value and Path(value).is_absolute() else fallback
+        self.config_home = xdg("XDG_CONFIG_HOME", self.home / ".config")
+        self.state_home = xdg("XDG_STATE_HOME", self.home / ".local/state")
+        self.shell = self.config_home / "omarchy/shell.toml"
+        self.state = self.state_home / "omarchy/plugins/drona.mac"
+        self.journal = self.state / "appearance-v1.json"
+
+    @contextlib.contextmanager
+    def lock(self):
+        safe_path(self.state)
+        self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self.state.stat().st_uid != os.getuid() or self.state.stat().st_mode & 0o077:
+            raise AppearanceError("Recovery directory must be owned by you with mode 0700")
+        lock_path = self.state / ".appearance.lock"
+        safe_path(lock_path)
+        fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+                raise AppearanceError("Unsafe lock file")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise AppearanceError("Another appearance transaction is running") from exc
+            yield
+        finally:
+            os.close(fd)
+
+    def load(self):
+        snapshot = read_file(self.journal, MAX_JOURNAL)
+        if snapshot is None:
+            return None
+        try:
+            journal = json.loads(raw(snapshot))
+            if (journal["version"] != 1 or journal["plugin"] != "drona.mac"
+                    or journal["config_home"] != str(self.config_home)
+                    or journal["home"] != str(self.home)
+                    or journal["dconf_profile"] != os.environ.get("DCONF_PROFILE", "")
+                    or journal["phase"] not in ("applying", "active", "restore-pending")
+                    or not isinstance(journal["entries"], list) or len(journal["entries"]) > 3):
+                raise ValueError("unsupported journal or changed HOME/XDG_CONFIG_HOME/DCONF_PROFILE")
+            identities = set()
+            for entry in journal["entries"]:
+                identity = (entry["kind"], entry.get("key"))
+                if identity in identities:
+                    raise ValueError("duplicate entry")
+                identities.add(identity)
+                if entry["kind"] == "gnome" and entry["key"] in PREFERENCES:
+                    for value in (entry["before"], entry["after"]):
+                        check_variant(value["effective"])
+                        if value["user"] is not None:
+                            check_variant(value["user"])
+                    desired = PREFERENCES[entry["key"]]
+                    if entry["after"] != {"effective": desired, "user": desired}:
+                        raise ValueError("unexpected GNOME target")
+                elif entry["kind"] == "shell" and entry.get("key") is None:
+                    for value in (entry["before"], entry["after"]):
+                        if value is not None:
+                            if len(raw(value)) > MAX_FILE or not isinstance(value["mode"], int) or not 0 <= value["mode"] <= 0o777:
+                                raise ValueError("invalid shell snapshot")
+                    if entry["after"] is None:
+                        raise ValueError("missing shell target")
+                else:
+                    raise ValueError("unknown journal entry")
+            return journal
+        except (KeyError, TypeError, ValueError, AppearanceError) as exc:
+            raise AppearanceError(f"Invalid recovery journal; preserved without changes: {exc}") from exc
+
+    def save(self, journal):
+        payload = (json.dumps(journal, indent=2, sort_keys=True) + "\n").encode()
+        if len(payload) > MAX_JOURNAL:
+            raise AppearanceError("Recovery journal exceeds its bounded size limit")
+        atomic_write(self.journal, payload)
+
+    def prepare(self, gnome=True, shell=True):
+        entries, skipped = [], []
+        if gnome:
+            if not shutil.which("gsettings") or not shutil.which("dconf"):
+                skipped.append({"adapter": "gnome", "reason": "gsettings and dconf are both required for exact unset/explicit restoration"})
+            else:
+                for key, desired in PREFERENCES.items():
+                    try:
+                        before = gnome_current(key)
+                        if before["effective"] == desired:
+                            continue  # Do not acquire ownership of existing preferences.
+                        if command("gsettings", "writable", SCHEMA, key) != "true":
+                            raise AppearanceError("Preference is not writable")
+                        entries.append({"kind": "gnome", "key": key, "before": before,
+                                        "after": {"effective": desired, "user": desired}})
+                    except AppearanceError as exc:
+                        skipped.append({"adapter": "gnome", "key": key, "reason": str(exc)})
+        if shell:
+            try:
+                if self.config_home != self.home / ".config":
+                    raise AppearanceError("Installed Color.qml uses HOME/.config; non-default XDG_CONFIG_HOME is unsupported for the shell palette")
+                values = palette_values()
+                source = read_file(COLOR_SOURCE, external=True)
+                content = raw(source).decode("utf-8")
+                if ('path: root.home + "/.config/omarchy/shell.toml"' not in content
+                        or "function loadUserShell(raw)" not in content
+                        or any(f'"{section}.{key}"' not in content for section, key in values)):
+                    raise AppearanceError("Compatible Omarchy Commons/Color.qml user-palette API not detected")
+                before = read_file(self.shell)
+                if before is not None and before["mode"] & ~0o777:
+                    raise AppearanceError("Special shell.toml mode bits are unsupported")
+                after = merge_palette(before, values)
+                if before != after:
+                    entries.append({"kind": "shell", "before": before, "after": after})
+            except (AppearanceError, OSError, UnicodeError) as exc:
+                skipped.append({"adapter": "shell", "reason": str(exc)})
+        return entries, skipped
+
+    def current(self, entry):
+        return gnome_current(entry["key"]) if entry["kind"] == "gnome" else read_file(self.shell)
+
+    def set_value(self, entry, expected, desired):
+        if not matches(self.current(entry), expected):
+            raise AppearanceError("Setting changed since inspection; refusing to overwrite")
+        if entry["kind"] == "shell":
+            if desired is None:
+                self.shell.unlink()
+                sync_dir(self.shell.parent)
+            else:
+                atomic_write(self.shell, raw(desired), desired["mode"])
+        else:
+            key = entry["key"]
+            if command("gsettings", "writable", SCHEMA, key) != "true":
+                raise AppearanceError("Preference is no longer writable")
+            if desired["user"] is None:
+                command("gsettings", "reset", SCHEMA, key)
+            else:
+                command("gsettings", "set", SCHEMA, key, desired["user"])
+        if not matches(self.current(entry), desired):
+            raise AppearanceError("Appearance write did not verify")
+
+    def summary(self, entry):
+        item = {"adapter": entry["kind"]}
+        if entry["kind"] == "gnome":
+            item.update(key=entry["key"], before=entry["before"], after=entry["after"])
+        else:
+            lines, _, keys = parse_shell(raw(entry["after"]).decode("utf-8"))
+            values = {}
+            for (section, key), index in keys.items():
+                if key in ALLOWED.get(section, set()):
+                    token = re.match(r'''\s*(["'][^"']+["']|-?\d+(?:\.\d+)?)''', lines[index].split("=", 1)[1])
+                    if token:
+                        values[f"{section}.{key}"] = token[1]
+            item.update(path=str(self.shell), values=values,
+                        previous_file_existed=entry["before"] is not None)
+        return item
+
+    def inspect(self, journal):
+        entries = []
+        for entry in journal["entries"]:
+            item = self.summary(entry)
+            try:
+                current = self.current(entry)
+                item["state"] = "applied" if matches(current, entry["after"]) else "original" if matches(current, entry["before"]) else "conflict"
+            except (AppearanceError, OSError) as exc:
+                item.update(state="unavailable", error=str(exc))
+            entries.append(item)
+        return entries
+
+    def restore_journal(self, journal):
+        journal["phase"] = "restore-pending"
+        self.save(journal)
+        restored, conflicts = [], []
+        for entry in list(reversed(journal["entries"])):
+            try:
+                current = self.current(entry)
+                if matches(current, entry["before"]):
+                    pass  # Already restored, including a crash after write/before checkpoint.
+                elif matches(current, entry["after"]):
+                    self.set_value(entry, entry["after"], entry["before"])
+                else:
+                    raise AppearanceError("Later edit preserved; current value does not match this plugin's write")
+            except (AppearanceError, OSError) as exc:
+                conflicts.append({**self.summary(entry), "reason": str(exc)})
+                continue
+            journal["entries"].remove(entry)
+            self.save(journal)
+            restored.append(self.summary(entry))
+        if not journal["entries"]:
+            self.journal.unlink()
+            sync_dir(self.state)
+        return {"result": "restore-conflicts" if conflicts else "restored", "restored": restored, "conflicts": conflicts}
+
+    def execute(self, action, yes=False, dry_run=False, gnome=True, shell=True):
+        mutate = action != "status" and yes and not dry_run
+        # Preview/status must not create the journal directory or lock file.
+        with self.lock() if mutate else contextlib.nullcontext():
+            journal = self.load()
+            base = {"plugin": "drona.mac", "action": action, "dry_run": not mutate,
+                    "journal": str(self.journal), "limitations": LIMITATIONS}
+            if action == "status":
+                entries, skipped = self.prepare(gnome, shell) if journal is None else ([], [])
+                return {**base, "result": "active" if journal else "inactive", "phase": journal["phase"] if journal else None,
+                        "entries": self.inspect(journal) if journal else [],
+                        "available_changes": [self.summary(e) for e in entries], "skipped": skipped}, 0
+            if action == "restore":
+                if journal is None:
+                    return {**base, "result": "nothing-to-restore"}, 0
+                if not mutate:
+                    return {**base, "result": "preview", "entries": self.inspect(journal)}, 0
+                result = self.restore_journal(journal)
+                return {**base, **result}, 2 if result["conflicts"] else 0
+            if journal is not None:
+                entries = self.inspect(journal)
+                active = journal["phase"] == "active" and all(e["state"] == "applied" for e in entries)
+                return {**base, "result": "already-applied" if active else "restore-required", "entries": entries,
+                        "message": "Existing backup retained. Restore before changing adapter selection or reapplying after edits/interruption."}, 0 if active else 2
+            entries, skipped = self.prepare(gnome, shell)
+            base.update(changes=[self.summary(e) for e in entries], skipped=skipped)
+            if not mutate:
+                return {**base, "result": "preview", "message": "No changes made. Use apply --yes to consent to available adapters."}, 0
+            if not entries:
+                return {**base, "result": "unavailable" if skipped else "unchanged"}, 1 if skipped else 0
+            journal = {"version": 1, "plugin": "drona.mac", "phase": "applying",
+                       "config_home": str(self.config_home), "home": str(self.home),
+                       "dconf_profile": os.environ.get("DCONF_PROFILE", ""),
+                       "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "entries": entries}
+            self.save(journal)  # Write-ahead: all originals durable before any appearance change.
+            try:
+                for entry in entries:
+                    self.set_value(entry, entry["before"], entry["after"])
+                journal["phase"] = "active"
+                self.save(journal)
+            except (Exception, KeyboardInterrupt) as exc:
+                try:
+                    rollback = self.restore_journal(journal)
+                except (Exception, KeyboardInterrupt) as rollback_exc:
+                    rollback = {"result": "recovery-required", "error": str(rollback_exc)}
+                return {**base, "result": "apply-failed", "error": str(exc), "rollback": rollback}, 1
+            return {**base, "result": "applied"}, 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", nargs="?", default="status", choices=("status", "apply", "restore"))
+    parser.add_argument("--yes", action="store_true", help="explicit consent; otherwise preview only")
+    parser.add_argument("--dry-run", action="store_true", help="force preview even with --yes")
+    parser.add_argument("--no-gnome", action="store_true", help="skip supported GNOME dark preferences")
+    parser.add_argument("--no-shell-palette", action="store_true", help="skip colour-only shell.toml override")
+    args = parser.parse_args(argv)
+    try:
+        output, code = Appearance().execute(args.action, args.yes, args.dry_run, not args.no_gnome, not args.no_shell_palette)
+    except (AppearanceError, OSError, ValueError, KeyboardInterrupt) as exc:
+        output, code = {"plugin": "drona.mac", "result": "error", "error": str(exc)}, 1
+    print(json.dumps(output, indent=2, sort_keys=True))
+    return code
+
+
+if __name__ == "__main__":
+    def interrupted(_signum, _frame):
+        raise InterruptedError("Appearance transaction interrupted; restore --yes can recover its journal")
+    signal.signal(signal.SIGTERM, interrupted)
+    sys.exit(main())

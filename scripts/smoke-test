@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Connect to Wayland for type support, but never map test desktop surfaces.
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+omarchy_path=${OMARCHY_PATH:-/usr/share/omarchy}
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"' EXIT
+cp "$root/tests/smoke.qml" "$tmp/shell.qml"
+# qs.* resolves relative to the test shell root; packaged source is read-only.
+ln -s "$omarchy_path/shell/Commons" "$tmp/Commons"
+ln -s "$omarchy_path/shell/Ui" "$tmp/Ui"
+mkdir "$tmp/state" "$tmp/config" "$tmp/cache"
+QT_QPA_PLATFORM=wayland MAC_PLUGIN_SOURCE="$root" \
+    XDG_STATE_HOME="$tmp/state" XDG_CONFIG_HOME="$tmp/config" XDG_CACHE_HOME="$tmp/cache" \
+    timeout 15s quickshell -p "$tmp" --no-color >"$tmp/log" 2>&1 || {
+        printf 'QML smoke test failed:\n'
+        grep -E '.' "$tmp/log"
+        exit 1
+    }
+grep -E 'MAC_PLUGIN_SMOKE_OK' "$tmp/log"
+if grep -E 'TypeError:|ReferenceError:|Unable to assign|is not a type|Cannot assign|is not defined|failed to load|Failed to load|Error loading configuration' "$tmp/log"; then
+    exit 1
+fi
+printf 'Hidden QML creation and stock-renderer compilation: passed.\n'

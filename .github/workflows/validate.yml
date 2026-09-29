@@ -1,0 +1,44 @@
+name: Validate
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pure settings and dock tests
+        run: |
+          node tests/test_preferences.cjs
+          node --test tests/dock-helpers.test.mjs
+      - name: Isolated appearance tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Validate manifest and distribution boundaries
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('manifest.json').read_text())
+          assert manifest['schemaVersion'] == 1
+          assert manifest['id'] == 'drona.mac'
+          assert manifest['kinds'] == ['bar']
+          for value in manifest['entryPoints'].values():
+              path = Path(value)
+              assert not path.is_absolute() and '..' not in path.parts
+              assert path.is_file()
+          for path in Path('.').rglob('*'):
+              if '.git' not in path.parts:
+                  assert not path.is_symlink(), path
+          PY
+      - name: Shell helper syntax
+        run: bash -n scripts/smoke-test
+# Native QML / layer-shell tests require the supported Omarchy Wayland session;
+# scripts/smoke-test and omarchy plugin validate are run there before tagging.

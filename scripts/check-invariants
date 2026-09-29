@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Read-only snapshot/compare of protected Hyprland configuration and bindings."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+OPTIONS = [
+    'general:border_size', 'general:gaps_in', 'general:gaps_out',
+    'general:col.active_border', 'general:col.inactive_border', 'general:layout',
+    'decoration:rounding', 'decoration:rounding_power', 'decoration:active_opacity',
+    'decoration:inactive_opacity', 'decoration:fullscreen_opacity',
+    'decoration:shadow:enabled', 'decoration:shadow:range',
+    'decoration:shadow:render_power', 'decoration:shadow:color',
+    'decoration:blur:enabled', 'decoration:blur:size', 'decoration:blur:passes',
+    'decoration:dim_inactive', 'decoration:dim_strength',
+    'group:col.border_active', 'group:col.border_inactive',
+]
+
+
+def query(*args):
+    proc = subprocess.run(['hyprctl', '-j', *args], capture_output=True, text=True, timeout=10)
+    if proc.returncode:
+        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip())
+    return json.loads(proc.stdout)
+
+
+def snapshot():
+    config = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config')))
+    files = {}
+    for file in sorted((config / 'hypr').rglob('*')):
+        if file.is_file():
+            files[str(file.relative_to(config))] = hashlib.sha256(file.read_bytes()).hexdigest()
+    bindings = query('binds')
+    # Runtime state is irrelevant; binding definitions are compared verbatim.
+    options = {name: query('getoption', name) for name in OPTIONS}
+    return {'schemaVersion': 1, 'files': files, 'bindings': bindings, 'options': options}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=['snapshot', 'compare'])
+    parser.add_argument('file', type=Path)
+    args = parser.parse_args()
+    current = snapshot()
+    if args.action == 'snapshot':
+        args.file.parent.mkdir(parents=True, exist_ok=True)
+        # Never silently overwrite the baseline.
+        with args.file.open('x') as stream:
+            json.dump(current, stream, indent=2)
+        args.file.chmod(0o600)
+        print('Saved protected-settings baseline:', args.file)
+        return 0
+    before = json.loads(args.file.read_text())
+    differences = [key for key in ('files', 'bindings', 'options') if before[key] != current[key]]
+    if differences:
+        print('Protected state differs: ' + ', '.join(differences), file=sys.stderr)
+        return 1
+    print('PASS: Hyprland config files, global keybindings and protected effective styling unchanged.')
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(2)

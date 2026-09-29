@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "drona.mac",
+  "name": "Mac Desktop",
+  "version": "0.1.0",
+  "author": "Drona Srivastava",
+  "description": "A dark macOS-inspired bar and dock for Omarchy. Preserves your logo, shortcuts and Hyprland window styling. Widgets are planned for later releases.",
+  "license": "MIT",
+  "kinds": ["bar"],
+  "entryPoints": {"bar": "Bar.qml"}
+}

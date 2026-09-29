@@ -1,0 +1,8 @@
+__agent__/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.log
+.local/
+.DS_Store

@@ -1,0 +1,42 @@
+# Drona Mac: colour-only overrides for Omarchy 4.0.4 Commons/Color.qml.
+# No geometry, typography, shared control styling, logo, polkit or lock changes.
+# Opaque surfaces remain readable without enabling compositor blur.
+[bar]
+background = "#171b24"
+background-alpha = 1.0
+text = "#edf1f8"
+active = "#79b5ff"
+
+[popups]
+background = "#202632"
+background-alpha = 1.0
+text = "#edf1f8"
+border = "#465267"
+border-alpha = 1.0
+
+[tooltip]
+background = "#252d3b"
+background-alpha = 1.0
+text = "#edf1f8"
+border = "#465267"
+border-alpha = 1.0
+
+[notifications]
+background = "#202632"
+background-alpha = 1.0
+text = "#edf1f8"
+border = "#465267"
+border-alpha = 1.0
+countdown = "#79b5ff"
+
+[menu]
+background = "#202632"
+background-alpha = 1.0
+text = "#edf1f8"
+border = "#465267"
+border-alpha = 1.0
+selected-background = "#344b69"
+selected-background-alpha = 1.0
+selected-text = "#ffffff"
+selected-border = "#79b5ff"
+selected-border-alpha = 1.0

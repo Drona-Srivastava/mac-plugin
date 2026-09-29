@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Omarchy 4.0.4 can retain a stale panel-routing reference after a hot bar swap.
+# Recreate the shell through its supported, lock-aware command after switching.
+set -euo pipefail
+omarchy plugin enable omarchy.bar
+omarchy restart shell
