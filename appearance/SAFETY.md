@@ -126,6 +126,10 @@ alternate XDG state home. Rather than promise reversible behavior around that
 interface, v0.1 ships the wallpaper for preview/manual selection only. Any manual
 wallpaper choice is outside this helper's restore contract.
 
+### Prism Night reference-inspired option
+
+`wallpapers/prism-night.png` and `generate_prism.py` are also original CC0-1.0 assets. Violet/cobalt/teal light fans take inspiration from the supplied reference's palette and composition; no screenshot pixels or Apple artwork are copied. Regenerate with `python3 appearance/generate_prism.py`. Both wallpaper options remain manual choices outside the colour helper's journal.
+
 ## Isolated verification
 
 ```sh

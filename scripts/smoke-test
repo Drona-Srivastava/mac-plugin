@@ -21,4 +21,4 @@ grep -E 'MAC_PLUGIN_SMOKE_OK' "$tmp/log"
 if grep -E 'TypeError:|ReferenceError:|Unable to assign|is not a type|Cannot assign|is not defined|failed to load|Failed to load|Error loading configuration' "$tmp/log"; then
     exit 1
 fi
-printf 'Hidden QML creation and stock-renderer compilation: passed.\n'
+printf 'Hidden QML creation and scoped-renderer compilation: passed.\n'

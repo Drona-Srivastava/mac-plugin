@@ -29,6 +29,7 @@ ShellRoot {
     Loader {
         id: loader
         Component.onCompleted: setSource("file://" + Quickshell.env("MAC_PLUGIN_SOURCE") + "/Bar.qml", {
+            surfacesEnabled: false,
             barConfig: {
                 layout: {
                     left: [],
@@ -43,7 +44,7 @@ ShellRoot {
         })
         onLoaded: {
             // Leave shell unset: no replacement bar or desktop surface is mapped.
-            root.rendererComponent = Qt.createComponent("file://" + item.omarchyPath + "/shell/plugins/bar/Bar.qml");
+            root.rendererComponent = Qt.createComponent("file://" + Quickshell.env("MAC_PLUGIN_SOURCE") + "/renderer/Bar.qml");
             root.loaded = true;
         }
         onStatusChanged: if (status === Loader.Error) {

@@ -130,7 +130,7 @@ PanelWindow {
                             font.weight: Font.DemiBold
                         }
                         Text {
-                            text: "DARK APPEARANCE · PREVIEW 0.1"
+                            text: "DARK APPEARANCE · PREVIEW 0.1.1"
                             color: "#a5a6b1"
                             font.family: "sans-serif"
                             font.pixelSize: 10

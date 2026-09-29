@@ -1,12 +1,12 @@
 # Mac Desktop for Omarchy
 
-A **macOS-inspired dark appearance** for Omarchy: a graphite menu bar, floating app dock, restrained translucency, and optional matching desktop/app colours. Omarchy's logo, shortcuts and Hyprland window styling remain yours.
+A **macOS-inspired dark appearance** for Omarchy: a translucent menu bar, compact dark dock with colourful app tiles, and optional matching desktop/app colours. Omarchy's logo, shortcuts and Hyprland window styling remain yours.
 
-**0.1.0 is a base-appearance preview.** Music, weather, calendar, Control Center and desktop widgets are deliberately deferred. This is not macOS, a macOS emulator, or an Apple Music client.
+**0.1.1 is a base-appearance preview.** Music, weather, calendar, Control Center and desktop widgets are deliberately deferred. This is not macOS, a macOS emulator, or an Apple Music client.
 
 ## Requirements
 
-Initial compatibility target: **Omarchy 4.0.4**, **Quickshell 0.3.1**, **Hyprland 0.56.2**, and Python 3.11+. These are the development versions, not a promise of compatibility with every later release. The plugin uses Omarchy's installed bar renderer and scoped plugin APIs. Older Waybar-based Omarchy installations are not supported.
+Initial compatibility target: **Omarchy 4.0.4**, **Quickshell 0.3.1**, **Hyprland 0.56.2**, and Python 3.11+. These are the development versions, not a promise of compatibility with every later release. The plugin uses a scoped, licensed clone of Omarchy 4.0.4's bar renderer and its installed plugin APIs. Older Waybar-based Omarchy installations are not supported.
 
 No extra font, icon theme, privileged installer, or package download is required. Fonts and app icons come from your installed system.
 
@@ -31,15 +31,15 @@ The **Apply appearance** action is explicitly confirmed and reversible. There is
 
 ## What this preview changes
 
-- A translucent graphite top bar with sans-serif labels and the original Omarchy logo.
+- A translucent dark top bar with sans-serif labels and the original Omarchy logo.
 - Optional Mac-style arrangement: active app on the left, clock at the far right.
 - Existing configured widgets retained, not replaced by dummy controls.
-- A floating dock for pinned/running apps, application focus/launch and contextual actions.
+- A floating dock for pinned/running apps, colourful rounded icon tiles, gentle hover scaling, application focus/launch and contextual actions.
 - Dock size/autohide, reduced transparency and reduced motion settings.
 - Optional dark GTK/Nautilus and stock-shell colour integration using the appearance helper.
-- An original abstract dark wallpaper, available for manual selection.
+- Original wallpapers for manual selection: **Prism Night** (violet/cobalt/teal fans inspired by the supplied reference) and **Graphite Tide** (quieter dark waves).
 
-The stock bar is **composed at runtime**, not copied or patched. Its existing menus, widget rendering and popup routing remain in use. Settings are persisted in the namespaced `bar.macDesktop` field in `~/.config/omarchy/shell.json`; the saved widget layout is not rewritten to achieve the Mac arrangement.
+The plugin inherits a **scoped local clone** of the Omarchy bar, with upstream licensing retained in `renderer/`. Packaged files are never patched. Existing menus, widget rendering and popup routing remain in use. On Omarchy 4.0.4 a blank configured logo after a hot switch triggers a bounded widget-catalog rescan; this resets stale component contexts without changing configuration or restarting the lock client. Settings are persisted in the namespaced `bar.macDesktop` field in `~/.config/omarchy/shell.json`; the saved widget layout is not rewritten to achieve the Mac arrangement.
 
 No global shortcuts, Hyprland rules, corners, gaps, borders, blur, shadow or opacity settings are changed. No Apple traffic-light window controls are added. Nautilus remains Nautilus; no unsupported libadwaita CSS patching is performed.
 
@@ -83,7 +83,7 @@ The wallpaper is **not** applied or restored by the colour helper. Record your o
 
 ```bash
 readlink -f ~/.local/state/omarchy/current/background
-omarchy theme bg set "$HOME/.config/omarchy/plugins/drona.mac/appearance/wallpapers/graphite-tide.png"
+omarchy theme bg set "$HOME/.config/omarchy/plugins/drona.mac/appearance/wallpapers/prism-night.png"
 ```
 
 Keep the previous path to restore it with `omarchy theme bg set /path/to/previous-image`. Select another image before removing the plugin so the background link is not left pointing into a deleted checkout.
@@ -134,7 +134,7 @@ python3 -m unittest discover -s tests -v
 scripts/smoke-test
 ```
 
-Use Qt **6** tools (`/usr/lib/qt6/bin/qmlformat` and `/usr/lib/qt6/bin/qmllint` on Arch); unqualified commands may point to Qt 5. `scripts/smoke-test` connects to an existing Wayland session with an isolated QML config and exits. All plugin windows stay hidden; it does not replace the running shell. It verifies component creation and stock-renderer compilation, not live pointer behavior.
+Use Qt **6** tools (`/usr/lib/qt6/bin/qmlformat` and `/usr/lib/qt6/bin/qmllint` on Arch); unqualified commands may point to Qt 5. `scripts/smoke-test` connects to an existing Wayland session with an isolated QML config and exits. All plugin windows stay hidden; it does not replace the running shell. It verifies component creation and local-renderer compilation, not live pointer behavior.
 
 Read-only protected-setting verification:
 
@@ -148,7 +148,7 @@ The snapshot includes private local configuration hashes and keybinding commands
 
 ## Known boundaries
 
-- Translucency is not native Apple's Liquid Glass refraction. Existing global blur settings are untouched.
+- Translucency is not native Apple's Liquid Glass refraction. Existing global blur settings are untouched. Use Reduce transparency for a solid high-contrast bar.
 - Application styling is limited to supported toolkit preferences. There is no exact Finder replacement.
 - A replacement bar has restricted service access. Third-party widgets requiring direct service objects may need upstream support; revert to the stock bar if one does not work.
 - Stock panels retain their structure and window-corner rules; the optional palette coordinates their colours only.
@@ -158,6 +158,6 @@ The snapshot includes private local configuration hashes and keybinding commands
 
 ## Design and licensing
 
-Inspired by the dark appearance of macOS 27 Golden Gate; no Apple logos, fonts, icon packs or wallpapers are bundled. This project is independent of Apple and Omarchy.
+Inspired by the dark appearance of macOS 27 Golden Gate and the user's supplied transparent-bar/colourful-dock reference; no Apple logos, fonts, icon packs or wallpapers are bundled. This project is independent of Apple and Omarchy.
 
 [MIT license](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md) · [Long-term plan](PLAN.md)

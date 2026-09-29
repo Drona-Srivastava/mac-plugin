@@ -1,107 +1,48 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "renderer" as Native
 import "components"
 import "services/Preferences.js" as Preferences
 
-// Compose Omarchy's installed renderer instead of copying or patching it.
-// Its widget/popup contract is retained, with only presentation properties changed.
-Item {
-    id: root
-    property string omarchyPath: Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy"
-    property var shell: null
-    property var manifest: null
-    property var pluginRegistry: null
-    property var barWidgetRegistry: null
-    property var barConfig: ({})
-    readonly property var renderer: barLoader.item
-    readonly property bool barHidden: renderer ? renderer.barHidden : false
-    readonly property int barSize: renderer ? renderer.barSize : 26
-    readonly property string position: "top"
-    readonly property string fontFamily: "sans-serif"
-    readonly property var activePopout: renderer ? renderer.activePopout : null
+// Inherit the scoped local clone directly so Omarchy's active bar is the actual
+// renderer. No nested stock-bar Loader or cross-instance component contexts.
+Native.Bar {
+    id: macRoot
     readonly property string projectPath: decodeURIComponent(String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "")).replace(/\/$/, "")
-    readonly property var presentation: Preferences.presentation(barConfig, preferences.values.macLayout, projectPath + "/components/ActiveApp.qml", projectPath + "/components/AppearanceButton.qml")
+
+    fontFamily: "sans-serif"
+    themeForeground: "#f4f4f7"
+    transparentForeground: "#f4f4f7"
+    foreground: "#f4f4f7"
+    background: preferences.values.reduceTransparency ? "#252631" : "#59202032"
+    urgent: "#79b8ff"
+    foregroundAnimationEnabled: !preferences.values.reduceMotion
+    toggleAppearanceTransparency: function () {
+        preferences.setValue("reduceTransparency", !preferences.values.reduceTransparency);
+    }
+    transformBarConfig: function (config) {
+        return Preferences.presentation(config, Preferences.normalize(config.macDesktop).macLayout, macRoot.projectPath + "/components/ActiveApp.qml", macRoot.projectPath + "/components/AppearanceButton.qml");
+    }
 
     QtObject {
         id: preferences
-        readonly property var values: Preferences.normalize(root.barConfig.macDesktop)
+        readonly property var values: Preferences.normalize(macRoot.barConfig.macDesktop)
         function setValue(key, value) {
-            if (!root.shell || !Object.prototype.hasOwnProperty.call(Preferences.defaults(), key))
+            if (!macRoot.shell || !Object.prototype.hasOwnProperty.call(Preferences.defaults(), key))
                 return;
-            root.shell.mutateShellConfig(function (config) {
+            macRoot.shell.mutateShellConfig(function (config) {
                 var next = Preferences.normalize(config.bar.macDesktop);
                 next[key] = value;
                 config.bar.macDesktop = Preferences.normalize(next);
             });
         }
     }
-
-    function configureRenderer() {
-        if (!renderer)
-            return;
-        renderer.omarchyPath = omarchyPath;
-        renderer.shell = shell;
-        renderer.manifest = manifest;
-        renderer.pluginRegistry = pluginRegistry;
-        renderer.barWidgetRegistry = barWidgetRegistry;
-        renderer.barConfig = presentation;
-        renderer.fontFamily = "sans-serif";
-        renderer.themeForeground = "#f4f4f7";
-        renderer.transparentForeground = "#f4f4f7";
-        renderer.foreground = "#f4f4f7";
-        renderer.background = preferences.values.reduceTransparency || barConfig.transparent === false ? "#202127" : "#e6202127";
-        renderer.urgent = "#79b8ff";
-        renderer.foregroundAnimationEnabled = !preferences.values.reduceMotion;
-    }
-    onShellChanged: configureRenderer()
-    onManifestChanged: configureRenderer()
-    onBarWidgetRegistryChanged: configureRenderer()
-    onPluginRegistryChanged: configureRenderer()
-    onPresentationChanged: configureRenderer()
     Connections {
         target: preferences
         function onValuesChanged() {
-            root.configureRenderer();
+            Qt.callLater(macRoot.applyBarConfig);
         }
-    }
-
-    Loader {
-        id: barLoader
-        active: root.shell !== null && root.barWidgetRegistry !== null
-        source: active ? "file://" + root.omarchyPath + "/shell/plugins/bar/Bar.qml" : ""
-        onLoaded: root.configureRenderer()
-        onStatusChanged: if (status === Loader.Error) {
-            console.error("Mac Desktop: incompatible stock bar renderer; returning to Omarchy bar.");
-            if (root.shell)
-                root.shell.mutateShellConfig(function (config) {
-                    config.bar.id = "omarchy.bar";
-                });
-        }
-    }
-
-    // Host shell routes existing panel shortcuts through its active bar.
-    function summonBarWidget(id) {
-        return renderer ? renderer.summonBarWidget(id) : false;
-    }
-    function hideBarWidget(id) {
-        return renderer ? renderer.hideBarWidget(id) : false;
-    }
-    function isBarWidgetOpen(id) {
-        return renderer ? renderer.isBarWidgetOpen(id) : false;
-    }
-    function panelWidgetIdAt(region, index) {
-        return renderer ? renderer.panelWidgetIdAt(region, index) : "";
-    }
-    function moduleWidgets(id) {
-        return renderer ? renderer.moduleWidgets(id) : [];
-    }
-    function toggleTransparency() {
-        if (renderer)
-            renderer.toggleTransparency();
-    }
-    function debugBarGeometry() {
-        return renderer ? renderer.debugBarGeometry() : [];
     }
 
     Dock {
@@ -110,7 +51,7 @@ Item {
     SettingsPanel {
         id: settingsPanel
         preferences: preferences
-        projectPath: root.projectPath
+        projectPath: macRoot.projectPath
     }
     IpcHandler {
         target: "drona-mac"
@@ -136,15 +77,41 @@ Item {
         }
         function status(): string {
             return JSON.stringify({
-                version: "0.1.0",
-                rendererReady: !!root.renderer,
+                version: "0.1.1",
+                rendererReady: true,
+                widgetCount: macRoot.moduleSlots.length,
+                audioPanelReady: !!macRoot.findPanelWidget("omarchy.audio"),
                 preferences: preferences.values
             });
         }
     }
+    // Omarchy 4.0.4 can retain component contexts owned by the previous bar.
+    // If its configured logo widget is blank after settling, request ONE bounded
+    // catalog rescan. The helper's runtime-only cooldown prevents reload loops.
     Timer {
-        interval: 1200
-        running: root.renderer !== null && root.shell !== null && !preferences.values.onboarded
+        interval: 1800
+        running: macRoot.shell !== null && macRoot.surfacesEnabled
+        onTriggered: {
+            var configured = ["left", "center", "right"].some(function (section) {
+                var entries = macRoot.barConfig.layout ? macRoot.barConfig.layout[section] || [] : [];
+                return entries.some(function (entry) {
+                    return Preferences.entryId(entry) === "omarchy.menu";
+                });
+            });
+            var ready = macRoot.moduleWidgets("omarchy.menu").some(function (widget) {
+                return widget && widget.implicitWidth > 0;
+            });
+            if (configured && !ready) {
+                console.warn("Mac Desktop: refreshing stale widget catalog after bar switch.");
+                Quickshell.execDetached(["python3", macRoot.projectPath + "/scripts/refresh-widget-catalog"]);
+            } else if (ready) {
+                Quickshell.execDetached(["python3", macRoot.projectPath + "/scripts/refresh-widget-catalog", "--reset"]);
+            }
+        }
+    }
+    Timer {
+        interval: 4000
+        running: macRoot.shell !== null && !preferences.values.onboarded
         onTriggered: {
             preferences.setValue("onboarded", true);
             settingsPanel.open();

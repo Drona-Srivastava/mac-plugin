@@ -1,6 +1,6 @@
 # Mac Plugin — implementation and release plan
 
-**Status:** Long-term roadmap. The base-appearance preview is implemented as `v0.1.0`; see `README.md` and `CHANGELOG.md` for shipped scope. Desktop widgets, Music, Control Center and advanced integrations remain future work. This document describes the intended larger product, not a claim that every planned feature is complete.
+**Status:** Long-term roadmap. The base-appearance preview is implemented as `v0.1.1`; see `README.md` and `CHANGELOG.md` for shipped scope. Desktop widgets, Music, Control Center and advanced integrations remain future work. This document describes the intended larger product, not a claim that every planned feature is complete.
 
 **Target repository:** <https://github.com/Drona-Srivastava/mac-plugin>
 

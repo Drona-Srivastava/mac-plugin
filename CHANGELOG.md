@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — 2026-09-30
+
+- Refine the base appearance from the supplied reference: translucent top bar, colourful rounded dock tiles, gentle hover scaling, and original violet/cobalt/teal **Prism Night** wallpaper.
+- Replace nested loading of the packaged bar with direct inheritance from a scoped, licensed local renderer clone.
+- Detect blank widgets after hot-switching on Omarchy 4.0.4 and request a bounded catalog rescan; add cooldown and path-safety tests.
+- Extend live readiness diagnostics and test cold-start/switch/re-enable behavior.
+- Supersedes 0.1.0, whose shared-renderer integration could leave widgets blank after a cold-start hot switch. Use 0.1.1 rather than pinning 0.1.0.
+
 ## 0.1.0 — 2026-09-30
 
 Initial **base-appearance preview**, not the complete roadmap.

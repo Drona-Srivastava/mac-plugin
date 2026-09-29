@@ -6,11 +6,11 @@
 - Python standard library for the opt-in appearance transaction.
 - The original Omarchy font and installed desktop-entry icons; no bundled Apple fonts or icons.
 
-`Bar.qml` composes the installed `/usr/share/omarchy/shell/plugins/bar/Bar.qml`. It passes through the host's scoped shell facade, widget catalog, registry and detached bar configuration. It adds its own active-app label and appearance button only in the **rendered** layout, and forwards existing panel-shortcut dispatch methods. This avoids copying thousands of lines of upstream shell code, but makes the installed renderer interface an explicit compatibility dependency.
+`Bar.qml` inherits the scoped local renderer in `renderer/Bar.qml`, cloned through the supported Omarchy command and distributed with upstream licensing. It receives the host's scoped shell facade, widget catalog, registry and detached bar configuration. It adds its own active-app label and appearance button only in the **rendered** layout and retains the inherited panel-shortcut dispatch methods. The Omarchy 4.0.4 host and shared UI interfaces remain explicit compatibility dependencies.
 
 A live test found that hot-switching back to the stock bar on Omarchy 4.0.4 can leave stale panel routing. `scripts/return-to-stock` and the settings return button switch the bar and perform a supported, lock-aware shell restart; this recovered normal panel routing in the test. Direct `omarchy plugin enable omarchy.bar` may require a subsequent `omarchy restart shell` while unlocked.
 
-If the nested renderer cannot load, the plugin requests a return to `omarchy.bar`. This is a best-effort recovery for component loading, not a security sandbox or proof that every future upstream change is compatible.
+On a hot switch, the host can also retain stale widget component contexts. If the configured Omarchy logo is blank after settling, the plugin requests a documented catalog rescan. A runtime-only cooldown bounds that retry and prevents reload loops. The direct-inheritance renderer avoids nesting another live stock bar. The host's standard failed-bar fallback remains available, but this is not a security sandbox or proof of future-version compatibility.
 
 ## Third-party widgets
 
@@ -18,7 +18,7 @@ Existing configured widget entries and settings are preserved. Omarchy deliberat
 
 ## Verified checks
 
-Automated coverage includes settings normalization, non-destructive presentation, dock app identity/grouping/reordering, shell-palette merging, idempotence, failed/interrupted appearance transactions, conflict handling, unsafe path rejection and wallpaper reproducibility. The hidden QML smoke test connects to Wayland for type support but keeps the dock/settings hidden and does not instantiate the replacement bar surfaces.
+Automated coverage includes settings normalization, non-destructive presentation, dock app identity/grouping/reordering, shell-palette merging, idempotence, failed/interrupted appearance transactions, conflict handling, unsafe path rejection and wallpaper reproducibility. The hidden QML smoke test connects to Wayland for type support but keeps the dock/settings hidden and gates off all bar surfaces.
 
 Read-only invariant comparison checks global keybinding definitions, hashes of files under the user's Hyprland configuration directory and selected effective border/gap/decoration/group values. It does not prove every property of arbitrary third-party applications.
 

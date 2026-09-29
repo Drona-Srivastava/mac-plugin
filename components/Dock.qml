@@ -19,10 +19,25 @@ Scope {
     readonly property bool reduceMotion: values.reduceMotion === true
     readonly property bool reduceTransparency: values.reduceTransparency === true
     readonly property string monitorName: String(values.dockMonitor || "")
-    readonly property color surfaceColor: reduceTransparency ? "#25272d" : "#ed25272d"
+    readonly property color surfaceColor: reduceTransparency ? "#252631" : "#dc252631"
     readonly property color textColor: "#f4f5f7"
     readonly property color secondaryColor: "#bec3ce"
-    readonly property color borderColor: "#626772"
+    readonly property color borderColor: "#55c4c8dd"
+
+    function iconTileColor(group) {
+        var key = String(group.desktopId || group.key || "").toLowerCase();
+        if (/terminal|alacritty|kitty|foot|ghostty/.test(key))
+            return "#30333e";
+        if (/nautilus|dolphin|thunar|nemo/.test(key))
+            return "#3aa9d7";
+        if (/firefox|chromium|chrome|browser/.test(key))
+            return "#548be4";
+        var colors = ["#8064d5", "#38a89c", "#cc638e", "#448bd1", "#609850", "#bf874f"];
+        var hash = 0;
+        for (var i = 0; i < key.length; i++)
+            hash = ((hash * 31) + key.charCodeAt(i)) >>> 0;
+        return colors[hash % colors.length];
+    }
     readonly property var dockScreens: {
         var screens = Quickshell.screens;
         if (!root.monitorName)
@@ -294,23 +309,51 @@ Scope {
                                     radius: 12
                                     color: appMouse.containsMouse ? "#25ffffff" : appItem.active ? "#17ffffff" : "transparent"
                                 }
-                                Image {
-                                    id: appIcon
+                                Rectangle {
+                                    id: iconTile
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     width: root.iconSize
                                     height: width
-                                    source: dockModel.iconSource(appItem.group.entry)
-                                    sourceSize: Qt.size(root.iconSize * (screenDock.modelData.devicePixelRatio || 1), root.iconSize * (screenDock.modelData.devicePixelRatio || 1))
-                                    fillMode: Image.PreserveAspectFit
-                                    asynchronous: true
-                                    smooth: true
-                                }
-                                Text {
-                                    anchors.centerIn: appIcon
-                                    visible: appIcon.status === Image.Error || appIcon.status === Image.Null
-                                    text: appItem.group.name.slice(0, 1).toUpperCase()
-                                    color: root.textColor
-                                    font.pixelSize: root.iconSize / 2
+                                    radius: Math.round(width * 0.24)
+                                    readonly property color tint: root.iconTileColor(appItem.group)
+                                    scale: appMouse.containsMouse && !root.reduceMotion ? 1.08 : 1
+                                    transformOrigin: Item.Center
+                                    border.width: 1
+                                    border.color: "#35ffffff"
+                                    gradient: Gradient {
+                                        GradientStop {
+                                            position: 0
+                                            color: Qt.lighter(iconTile.tint, 1.12)
+                                        }
+                                        GradientStop {
+                                            position: 1
+                                            color: Qt.darker(iconTile.tint, 1.12)
+                                        }
+                                    }
+                                    Behavior on scale {
+                                        NumberAnimation {
+                                            duration: root.reduceMotion ? 0 : 120
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+                                    Image {
+                                        id: appIcon
+                                        anchors.centerIn: parent
+                                        width: root.iconSize * 0.80
+                                        height: width
+                                        source: dockModel.iconSource(appItem.group.entry)
+                                        sourceSize: Qt.size(root.iconSize * (screenDock.modelData.devicePixelRatio || 1), root.iconSize * (screenDock.modelData.devicePixelRatio || 1))
+                                        fillMode: Image.PreserveAspectFit
+                                        asynchronous: true
+                                        smooth: true
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: appIcon.status === Image.Error || appIcon.status === Image.Null
+                                        text: appItem.group.name.slice(0, 1).toUpperCase()
+                                        color: root.textColor
+                                        font.pixelSize: root.iconSize / 2
+                                    }
                                 }
                                 Rectangle {
                                     anchors.horizontalCenter: parent.horizontalCenter
