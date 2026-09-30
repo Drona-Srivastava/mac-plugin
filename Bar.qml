@@ -77,7 +77,7 @@ Native.Bar {
         }
         function status(): string {
             return JSON.stringify({
-                version: "0.1.1",
+                version: "0.2.0",
                 rendererReady: true,
                 widgetCount: macRoot.moduleSlots.length,
                 audioPanelReady: !!macRoot.findPanelWidget("omarchy.audio"),

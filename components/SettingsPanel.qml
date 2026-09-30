@@ -123,14 +123,14 @@ PanelWindow {
                     ColumnLayout {
                         spacing: 2
                         Text {
-                            text: "Mac Desktop"
+                            text: "Luxe Desktop"
                             color: "#f5f5f7"
                             font.family: "sans-serif"
                             font.pixelSize: 21
                             font.weight: Font.DemiBold
                         }
                         Text {
-                            text: "DARK APPEARANCE · PREVIEW 0.1.1"
+                            text: "OMARCHY DESKTOP · 0.2.0"
                             color: "#a5a6b1"
                             font.family: "sans-serif"
                             font.pixelSize: 10
@@ -147,7 +147,7 @@ PanelWindow {
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: "Your Omarchy logo, shortcuts and window styling stay exactly as they are. Widgets are coming later."
+                    text: "Your Omarchy logo, shortcuts and window styling stay as configured. Desktop cards live behind normal windows."
                     color: "#b9bac4"
                     font.family: "sans-serif"
                     font.pixelSize: 12
@@ -162,6 +162,50 @@ PanelWindow {
                     title: "Show dock"
                     checked: root.preferences.values.dockEnabled
                     onToggled: root.preferences.setValue("dockEnabled", !checked)
+                }
+                ToggleRow {
+                    title: "Show desktop widgets"
+                    checked: root.preferences.values.desktopWidgetsEnabled
+                    onToggled: root.preferences.setValue("desktopWidgetsEnabled", !checked)
+                }
+                ToggleRow {
+                    title: "Weather card"
+                    checked: root.preferences.values.weatherEnabled
+                    onToggled: root.preferences.setValue("weatherEnabled", !checked)
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "Weather units"
+                        color: "#eeeeF4"
+                        font.family: "sans-serif"
+                        font.pixelSize: 13
+                        Layout.fillWidth: true
+                    }
+                    ActionButton {
+                        label: root.preferences.values.weatherUnit === "imperial" ? "°F" : "°C"
+                        onClicked: root.preferences.setValue("weatherUnit", root.preferences.values.weatherUnit === "imperial" ? "metric" : "imperial")
+                    }
+                }
+                ToggleRow {
+                    title: "Calendar card"
+                    checked: root.preferences.values.calendarEnabled
+                    onToggled: root.preferences.setValue("calendarEnabled", !checked)
+                }
+                ToggleRow {
+                    title: "System card"
+                    checked: root.preferences.values.systemEnabled
+                    onToggled: root.preferences.setValue("systemEnabled", !checked)
+                }
+                ToggleRow {
+                    title: "Music card"
+                    checked: root.preferences.values.musicEnabled
+                    onToggled: root.preferences.setValue("musicEnabled", !checked)
+                }
+                ToggleRow {
+                    title: "24-hour clock"
+                    checked: root.preferences.values.use24HourClock
+                    onToggled: root.preferences.setValue("use24HourClock", !checked)
                 }
                 ToggleRow {
                     title: "Automatically hide dock"

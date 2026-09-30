@@ -6,4 +6,6 @@ The plugin code is licensed under the repository's MIT license. The original gen
 
 Qt, Quickshell, Hyprland and the system's fonts/icon themes are runtime dependencies provided by the user's installation; their licenses remain with their upstream projects. Application icons are resolved from the user's installed desktop entries and icon themes, not bundled here.
 
+The optional weather card requests forecast data from [Open-Meteo](https://open-meteo.com/). Weather data is provided under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the card credits Open-Meteo.
+
 No Apple logos, San Francisco fonts, SF Symbols, macOS wallpapers or Apple application assets are distributed. macOS, Apple Music and related names belong to Apple Inc. This independent project is not affiliated with or endorsed by Apple or the Omarchy project.

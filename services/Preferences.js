@@ -3,6 +3,8 @@ function defaults() {
     return {
         dockEnabled: true, dockAutoHide: true, dockSize: 48, dockPins: [], dockPinsInitialized: false,
         dockMonitor: "", reduceMotion: false, reduceTransparency: false,
+        desktopWidgetsEnabled: true, use24HourClock: true,
+        weatherEnabled: true, weatherUnit: "metric", calendarEnabled: true, systemEnabled: true, musicEnabled: true,
         macLayout: true, onboarded: false
     };
 }
@@ -16,6 +18,7 @@ function normalize(raw) {
     if (typeof raw.dockSize === "number" && isFinite(raw.dockSize))
         result.dockSize = Math.max(32, Math.min(72, Math.round(raw.dockSize)));
     if (typeof raw.dockMonitor === "string") result.dockMonitor = raw.dockMonitor;
+    if (["metric", "imperial"].indexOf(raw.weatherUnit) !== -1) result.weatherUnit = raw.weatherUnit;
     if (Array.isArray(raw.dockPins)) {
         result.dockPins = raw.dockPins.filter(function(id, index, all) {
             return typeof id === "string" && id.length > 0 && id.length < 256 && all.indexOf(id) === index;

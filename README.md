@@ -1,12 +1,12 @@
-# Mac Desktop for Omarchy
+# Luxe Desktop for Omarchy
 
-A **macOS-inspired dark appearance** for Omarchy: a translucent menu bar, compact dark dock with colourful app tiles, and optional matching desktop/app colours. Omarchy's logo, shortcuts and Hyprland window styling remain yours.
+A **macOS-inspired Omarchy desktop package** with a dark bar, application dock, pinned desktop widgets, and optional matching application colours. The design uses Linux applications and system services while preserving Omarchy's logo, shortcuts, and Hyprland window styling.
 
-**0.1.1 is a base-appearance preview.** Music, weather, calendar, Control Center and desktop widgets are deliberately deferred. This is not macOS, a macOS emulator, or an Apple Music client.
+**0.2.0 adds the first desktop widget layer.** Cards for clock, weather, calendar, system readings, and MPRIS music sit above the wallpaper and behind normal windows. This is not macOS, a macOS emulator, or an Apple Music client.
 
 ## Requirements
 
-Initial compatibility target: **Omarchy 4.0.4**, **Quickshell 0.3.1**, **Hyprland 0.56.2**, and Python 3.11+. These are the development versions, not a promise of compatibility with every later release. The plugin uses a scoped, licensed clone of Omarchy 4.0.4's bar renderer and its installed plugin APIs. Older Waybar-based Omarchy installations are not supported.
+Initial compatibility target: **Omarchy 4.0.4**, **Quickshell 0.3.1**, **Hyprland 0.56.2**, and Python 3.11+ for the optional appearance helper. These are the development versions, not a promise of compatibility with every later release. The plugin uses a scoped, licensed clone of Omarchy 4.0.4's bar renderer and its installed plugin APIs. Older Waybar-based Omarchy installations are not supported.
 
 No extra font, icon theme, privileged installer, or package download is required. Fonts and app icons come from your installed system.
 
@@ -21,7 +21,7 @@ omarchy plugin add https://github.com/Drona-Srivastava/mac-plugin.git --enable
 
 Omarchy prompts before running a third-party plugin. Plugins are **unsandboxed code in your desktop session**; review the repository first. Non-interactive automation may use Omarchy's `--yes` option.
 
-The installer activates the bar/dock, not external application theming. The appearance panel opens once on first enable. Reopen it with the small sliders button in the top bar or:
+The plugin activates the bar, dock, and desktop widget service. Widgets can be disabled independently in the appearance panel, which opens once on first enable. Reopen it with the small sliders button in the top bar or:
 
 ```bash
 omarchy-shell drona-mac settings
@@ -35,6 +35,7 @@ The **Apply appearance** action is explicitly confirmed and reversible. There is
 - Optional Mac-style arrangement: active app on the left, clock at the far right.
 - Existing configured widgets retained, not replaced by dummy controls.
 - A floating dock for pinned/running apps, colourful rounded icon tiles, gentle hover scaling, application focus/launch and contextual actions.
+- A pinned desktop layer with clock, Omarchy weather status, monthly calendar, system readings, and MPRIS controls. Its small layer-shell windows are placed over the wallpaper and behind regular windows.
 - Dock size/autohide, reduced transparency and reduced motion settings.
 - Optional dark GTK/Nautilus and stock-shell colour integration using the appearance helper.
 - Original wallpapers for manual selection: **Prism Night** (violet/cobalt/teal fans inspired by the supplied reference) and **Graphite Tide** (quieter dark waves).
@@ -55,9 +56,18 @@ Use the appearance panel for normal changes. The following keys are stored under
 | `dockPins` | `[]` | Up to 40 desktop-entry IDs; first run uses detected default apps |
 | `dockPinsInitialized` | `false` | Set after editing pins, so unpinning everything stays empty |
 | `dockMonitor` | `""` | Empty for all monitors, otherwise an output name |
+| `desktopWidgetsEnabled` | `true` | Show the pinned desktop widget layer |
+| `weatherEnabled` | `true` | Show the weather card |
+| `weatherUnit` | `"metric"` | Use Celsius or Fahrenheit for Open-Meteo results |
+| `calendarEnabled` | `true` | Show the monthly calendar card |
+| `systemEnabled` | `true` | Show CPU, memory, disk, battery, GPU and temperature readings |
+| `musicEnabled` | `true` | Show the MPRIS now-playing card |
+| `use24HourClock` | `true` | Use 24-hour time in the desktop clock |
 | `macLayout` | `true` | Active-app label and right-aligned clock; saved layout is retained |
 | `reduceMotion` | `false` | Reduce plugin-owned animations |
 | `reduceTransparency` | `false` | Use solid plugin surfaces |
+
+The widget layer targets the first monitor by default, or the configured dock monitor. Weather reads Omarchy's shared location file and uses Open-Meteo for current conditions and today's high/low, refreshing at most every 30 minutes with in-memory last-good data. If coordinates are not configured, it falls back to Omarchy's weather status command. Open-Meteo is credited on the card; its data is provided under CC BY 4.0. System readings sample `/proc`, filesystem usage, UPower, NVIDIA tools, and sensors when available. Missing hardware is reported as unavailable. The cards do not run when disabled.
 
 A one-time `onboarded` flag records that the welcome panel was shown. Preferences are retained when switching bars, so they are available on re-enable.
 
@@ -148,13 +158,13 @@ The snapshot includes private local configuration hashes and keybinding commands
 
 ## Known boundaries
 
-- Translucency is not native Apple's Liquid Glass refraction. Existing global blur settings are untouched. Use Reduce transparency for a solid high-contrast bar.
+- Translucency is not native Apple's Liquid Glass refraction. Existing global blur settings are untouched. Use Reduce transparency for solid high-contrast surfaces.
 - Application styling is limited to supported toolkit preferences. There is no exact Finder replacement.
 - A replacement bar has restricted service access. Third-party widgets requiring direct service objects may need upstream support; revert to the stock bar if one does not work.
 - Stock panels retain their structure and window-corner rules; the optional palette coordinates their colours only.
 - The Mac bar always renders at the top. Your prior bar placement/layout returns with the stock bar.
 - No universal Linux global menu, native macOS minimization, AirDrop, Continuity or Apple account integration is claimed.
-- Hardware, multi-monitor and accessibility support require testing on your system; see [compatibility notes](docs/COMPATIBILITY.md).
+- Desktop cards render on one selected monitor at a time. Hardware, multi-monitor and accessibility support require testing on your system; see [compatibility notes](docs/COMPATIBILITY.md).
 
 ## Design and licensing
 

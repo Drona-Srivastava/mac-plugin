@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — 2026-09-30
+
+- Add a long-lived Omarchy service entry alongside the existing bar plugin.
+- Add pinned bottom-layer clock, Open-Meteo weather, monthly calendar, system, and MPRIS cards.
+- Add independent widget and 12/24-hour clock controls to the settings panel.
+- Keep weather refresh at 30 minutes and system sampling at 15 seconds; use available local system interfaces and tolerate missing hardware.
+- Add project session context, development log, install and contribution documentation.
+
 ## 0.1.1 — 2026-09-30
 
 - Refine the base appearance from the supplied reference: translucent top bar, colourful rounded dock tiles, gentle hover scaling, and original violet/cobalt/teal **Prism Night** wallpaper.

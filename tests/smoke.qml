@@ -5,6 +5,7 @@ import Quickshell
 ShellRoot {
     id: root
     property bool loaded: false
+    property bool serviceLoaded: false
     property var rendererComponent: null
     QtObject {
         id: fakeShell
@@ -24,6 +25,23 @@ ShellRoot {
         property int revision: 0
         function metadataFor(id) {
             return null;
+        }
+    }
+    QtObject {
+        id: fakePluginShell
+        property var barConfig: ({macDesktop: {desktopWidgetsEnabled: false}})
+        function mutateShellConfig(mutator) { return false; }
+    }
+    Loader {
+        id: serviceLoader
+        source: "file://" + Quickshell.env("MAC_PLUGIN_SOURCE") + "/Service.qml"
+        onLoaded: {
+            if (item && "shell" in item) item.shell = fakePluginShell;
+            root.serviceLoaded = !!item;
+        }
+        onStatusChanged: if (status === Loader.Error) {
+            console.error("MAC_PLUGIN_SERVICE_SMOKE_FAILED");
+            Qt.quit();
         }
     }
     Loader {
@@ -56,10 +74,10 @@ ShellRoot {
         interval: 2500
         running: true
         onTriggered: {
-            if (!root.loaded || !root.rendererComponent || root.rendererComponent.status !== Component.Ready)
+            if (!root.loaded || !root.serviceLoaded || !root.rendererComponent || root.rendererComponent.status !== Component.Ready)
                 console.error("MAC_PLUGIN_SMOKE_FAILED", root.rendererComponent ? root.rendererComponent.errorString() : "not loaded");
             else
-                console.log("MAC_PLUGIN_SMOKE_OK");
+                console.log("MAC_PLUGIN_SMOKE_OK", "bar+desktop-service");
             Qt.quit();
         }
     }
