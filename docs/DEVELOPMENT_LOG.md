@@ -26,7 +26,7 @@
 
 **Issues:** Changes remain staged in the workspace clone, not yet in `/home/nova/.config/omarchy/plugins/drona.mac`. That target lies outside writable roots and needs an approved transfer. No GitHub push has been made.
 
-**Next steps:** Transfer the reviewed patch to the original checkout with explicit filesystem approval, confirm its clean baseline, run local validation there, and leave GitHub publication as a separate requested action.
+**Next steps:** Transfer the reviewed patch to the original checkout with explicit filesystem approval, confirm its clean baseline, and run local validation there. Push to GitHub after authentication is available.
 
 ## 2026-09-30 23:25 IST — Final probe and smoke update
 
@@ -41,3 +41,17 @@
 **Issues:** The Omarchy shell remains stopped, so cards have not yet been visibly inspected or interacted with on the actual desktop.
 
 **Next steps:** Transfer the implementation to the original checkout, run the final validation commands there, and retain the local commit for review. No remote push was made.
+
+## 2026-09-30 23:25 IST — Repository integration and publication attempt
+
+**Objective:** Land the validated implementation in the user's existing plugin checkout and publish it to the provided GitHub repository.
+
+**Changes:** Applied the widget feature commit to `/home/nova/.config/omarchy/plugins/drona.mac` as local commit `a9ce166` (`feat: add pinned desktop widget layer`).
+
+**Tests:** Manifest validation, Node tests, all 38 Python tests, QML parse/lint, and the isolated Wayland smoke test passed in the target checkout.
+
+**Result:** The target checkout is clean and `main` is one commit ahead of `origin/main`.
+
+**Issues:** `git push origin main` could not read a GitHub username in this non-interactive session. `gh auth status -h github.com` confirms there is no authenticated GitHub host. No remote ref was changed.
+
+**Next steps:** Authenticate with `gh auth login`, then run `git push origin main`; afterward, activate/test the plugin in an Omarchy session that is running.

@@ -31,6 +31,7 @@ Omarchy 4.0.4, Quickshell 0.3.1, Hyprland 0.56.2 are the local baseline. Existin
 
 - The source repo lives at `/home/nova/.config/omarchy/plugins/drona.mac`, outside the writable project root. Work is being staged in `/home/nova/Projects/Enhance shih/omarchy-luxe`; changes must be transferred back after an approved write operation.
 - The isolated Quickshell smoke test passed after the final widget changes and loaded both the bar and desktop service. The actual Omarchy shell remains stopped, so plugin-manager activation and visible layer/input behavior were not verified.
+- The implementation is committed locally in the target checkout. A push to the specified GitHub remote could not authenticate: `gh auth status` reports no logged-in host, and Git cannot prompt for credentials in this session.
 - Validate whether the injected service facade's `barConfig.macDesktop` binding updates after a settings change. If not, connect service preferences to a suitable supported host update mechanism without widening the plugin's permissions.
 - Verify actual MPRIS method/property names with Qt 6 QML lint and an active session.
 - Confirm QML attachment of children to `PanelWindow`, layer ordering, input bounds, multiple displays, and fullscreen behavior on a live Hyprland session.
@@ -47,4 +48,4 @@ Inspected Omarchy plugin docs and installed service APIs under `/usr/share/omarc
 
 ## Next steps
 
-Request permitted write access to transfer these changes into the real plugin checkout. Then test plugin-manager activation, settings propagation, visible layer/input behavior, service failure isolation, disable/remove behavior, and update this file and `DEVELOPMENT_LOG.md` before considering a release.
+After GitHub authentication, push the local `main` commit with a normal fast-forward push. Then test plugin-manager activation, settings propagation, visible layer/input behavior, service failure isolation, and disable/remove behavior before considering a release.
